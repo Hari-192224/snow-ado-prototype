@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SNOW ↔ ADO Sync — Quick Ticket Closure</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0f1521; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  input[type="checkbox"] { accent-color: #38bdf8; width: 15px; height: 15px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState } = React;
+
+/* ---- inline icon set (replaces lucide-react so no install needed) ---- */
+const ICONS = {
+  refresh: (<React.Fragment><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></React.Fragment>),
+  dashboard: (<React.Fragment><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></React.Fragment>),
+  file: (<React.Fragment><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></React.Fragment>),
+  trash: (<React.Fragment><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></React.Fragment>),
+  activity: (<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>),
+  alert: (<React.Fragment><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></React.Fragment>),
+  link: (<React.Fragment><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></React.Fragment>),
+  check: (<React.Fragment><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></React.Fragment>),
+  server: (<React.Fragment><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></React.Fragment>),
+  git: (<React.Fragment><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></React.Fragment>),
+  zap: (<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>),
+  loader: (<path d="M21 12a9 9 0 1 1-6.219-8.56"/>),
+  arrow: (<React.Fragment><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></React.Fragment>),
+  bell: (<React.Fragment><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></React.Fragment>),
+};
+function Ico({ name, size = 16, color = "currentColor", className, style }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className} style={style}>
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+function App() {
+  const [screen, setScreen] = useState("dashboard");
+  const incidents = [
+    { id: "INC1001", title: "Order-sync API returning 500 on batch run", ado: "Bug #5678", adoStatus: "Completed", age: 14, sla: "Breached", priority: "P3" },
+    { id: "INC1002", title: "Warehouse label printing service down", ado: "Bug #5691", adoStatus: "Completed", age: 9, sla: "At Risk", priority: "P2" },
+    { id: "INC1003", title: "Duplicate shipment records in tracking UI", ado: "Story #4412", adoStatus: "Completed", age: 21, sla: "Breached", priority: "P4" },
+    { id: "INC1004", title: "Inventory count mismatch after nightly job", ado: "Bug #5702", adoStatus: "Completed", age: 6, sla: "OK", priority: "P3" },
+    { id: "INC1005", title: "SAP EWM integration timeout", ado: "Task #3301", adoStatus: "Completed", age: 18, sla: "Breached", priority: "P2" },
+    { id: "INC1006", title: "Dashboard widget not loading for EU region", ado: "Bug #5715", adoStatus: "Completed", age: 4, sla: "OK", priority: "P4" },
+  ];
+  const NAV = [
+    { key: "dashboard", label: "Governance Dashboard", icon: "dashboard" },
+    { key: "incident", label: "Incident Details", icon: "file" },
+    { key: "cleanup", label: "Bulk Cleanup Console", icon: "trash" },
+  ];
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: "#0f1521", color: "#e6ebf2" }}>
+      <aside style={{ width: "230px", background: "#141c2b", borderRight: "1px solid #24304a", padding: "20px 14px", flexShrink: 0, position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "9px", marginBottom: "4px", padding: "0 6px" }}>
+          <div style={{ background: "linear-gradient(135deg,#3b82f6,#06b6d4)", width: "34px", height: "34px", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Ico name="refresh" size={18} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 700, lineHeight: 1.1 }}>SNOW <span style={{ color: "#38bdf8" }}>↔</span> ADO</div>
+            <div style={{ fontSize: "10px", color: "#7c8aa5" }}>Sync & Auto-Close</div>
+          </div>
+        </div>
+        <div style={{ fontSize: "10px", color: "#5f6d88", textTransform: "uppercase", letterSpacing: "0.08em", margin: "22px 6px 8px" }}>Screens</div>
+        {NAV.map((n) => {
+          const active = screen === n.key;
+          return (
+            <button key={n.key} onClick={() => setScreen(n.key)} style={{
+              width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: "10px",
+              padding: "10px 12px", marginBottom: "4px", borderRadius: "8px", border: "none", cursor: "pointer",
+              background: active ? "#1e3a5f" : "transparent", color: active ? "#7dd3fc" : "#aab6cc",
+              fontSize: "13px", fontWeight: active ? 600 : 500, fontFamily: "inherit"
+            }}>
+              <Ico name={n.icon} size={16} /> {n.label}
+            </button>
+          );
+        })}
+        <div style={{ position: "absolute", bottom: "18px", width: "202px" }}>
+          <div style={{ background: "#0f1521", border: "1px solid #24304a", borderRadius: "9px", padding: "10px 12px" }}>
+            <div style={{ fontSize: "10px", color: "#5f6d88", marginBottom: "3px" }}>SUBMITTED BY</div>
+            <div style={{ fontSize: "12px", fontWeight: 600 }}>Team CDOC</div>
+            <div style={{ fontSize: "10px", color: "#7c8aa5" }}>BlueBolt · Cognizant</div>
+          </div>
+        </div>
+      </aside>
+      <main style={{ flex: 1, padding: "26px 30px", overflowY: "auto" }}>
+        {screen === "dashboard" && <Dashboard incidents={incidents} />}
+        {screen === "incident" && <IncidentDetails />}
+        {screen === "cleanup" && <BulkCleanup incidents={incidents} />}
+      </main>
+    </div>
+  );
+}
+
+function Dashboard({ incidents }) {
+  const stats = [
+    { label: "Open Incidents", value: 247, icon: "server", color: "#38bdf8", tint: "#0c2a3f" },
+    { label: "SLA Breach Risk", value: 18, icon: "alert", color: "#fbbf24", tint: "#3a2f0c" },
+    { label: "Missing Linkages", value: 32, icon: "link", color: "#f87171", tint: "#3a1616" },
+    { label: "Auto-Closed Today", value: 41, icon: "check", color: "#34d399", tint: "#0c3325" },
+  ];
+  const trend = [320, 305, 298, 280, 271, 259, 247];
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const max = 340, min = 220, W = 620, H = 180, pad = 30;
+  const pts = trend.map((v, i) => {
+    const x = pad + (i * (W - pad * 2)) / (trend.length - 1);
+    const y = pad + (H - pad * 2) * (1 - (v - min) / (max - min));
+    return [x, y];
+  });
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`).join(" ");
+  const area = `${line} L${pts[pts.length - 1][0]},${H - pad} L${pts[0][0]},${H - pad} Z`;
+  return (
+    <div>
+      <Header title="Governance Dashboard" subtitle="Real-time SNOW ↔ ADO synchronization health" />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "18px" }}>
+        {stats.map((s) => (
+          <div key={s.label} style={{ background: "#141c2b", border: "1px solid #24304a", borderRadius: "12px", padding: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ background: s.tint, borderRadius: "8px", padding: "7px" }}><Ico name={s.icon} size={18} color={s.color} /></div>
+            </div>
+            <div style={{ fontSize: "30px", fontWeight: 700, marginTop: "12px", color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: "12px", color: "#8695af", marginTop: "2px" }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: "14px" }}>
+        <div style={{ background: "#141c2b", border: "1px solid #24304a", borderRadius: "12px", padding: "18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+            <Ico name="activity" size={16} color="#38bdf8" />
+            <span style={{ fontSize: "13px", fontWeight: 600 }}>Ticket Aging Backlog — last 7 days</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#8695af", marginBottom: "10px" }}>Backlog trending down as auto-closure clears stale incidents</div>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%" }}>
+            <defs>
+              <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {[0, 1, 2, 3].map((i) => {
+              const y = pad + ((H - pad * 2) * i) / 3;
+              return <line key={i} x1={pad} y1={y} x2={W - pad} y2={y} stroke="#24304a" strokeWidth="1" />;
+            })}
+            <path d={area} fill="url(#g)" />
+            <path d={line} fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="3.5" fill="#0f1521" stroke="#38bdf8" strokeWidth="2" />)}
+            {days.map((d, i) => <text key={d} x={pts[i][0]} y={H - 8} fill="#7c8aa5" fontSize="11" textAnchor="middle">{d}</text>)}
+          </svg>
+        </div>
+        <div style={{ background: "#141c2b", border: "1px solid #24304a", borderRadius: "12px", padding: "18px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "12px" }}>Recent Auto-Close Activity</div>
+          {incidents.slice(0, 5).map((inc) => (
+            <div key={inc.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 0", borderBottom: "1px solid #1d2739" }}>
+              <div style={{ background: "#0c3325", borderRadius: "6px", padding: "5px" }}><Ico name="check" size={13} color="#34d399" /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "12px", fontWeight: 600 }}>{inc.id}</div>
+                <div style={{ fontSize: "10px", color: "#7c8aa5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inc.ado} completed</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IncidentDetails() {
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [closed, setClosed] = useState(false);
+  const incident = {
+    id: "INC123456",
+    title: "Order-sync service failing intermittently after nightly batch",
+    ado: "Bug #5678", adoStatus: "Completed", priority: "P3",
+    system: "Warehouse Order-Sync API (Manufacturing/Logistics)",
+  };
+  const generateNotes = () => {
+    setLoading(true); setNotes("");
+    setTimeout(() => {
+      setNotes("Linked ADO Bug #5678 has been completed and validated. The intermittent order-sync failure was traced to a null-pointer exception in the batch retry handler, which has been fixed with a guard clause and unit test, then deployed in release 24.6.2. No further action required. Incident closed automatically via SNOW-ADO sync with governance checks passed.");
+      setLoading(false);
+    }, 1100);
+  };
+  const btn = (bg, fg, disabled) => ({
+    display: "flex", alignItems: "center", gap: "7px", background: bg, color: fg, border: "none",
+    borderRadius: "9px", padding: "10px 16px", fontSize: "13px", fontWeight: 600,
+    cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.55 : 1, fontFamily: "inherit",
+  });
+  return (
+    <div>
+      <Header title="Incident Details" subtitle="AI-assisted closure recommendation" />
+      <div style={{ background: "#141c2b", border: "1px solid #24304a", borderRadius: "12px", padding: "22px", maxWidth: "720px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 700 }}>{incident.id}</div>
+            <div style={{ fontSize: "13px", color: "#aab6cc", marginTop: "3px", maxWidth: "460px" }}>{incident.title}</div>
+          </div>
+          <span style={{ background: "#3a2f0c", color: "#fbbf24", fontSize: "11px", fontWeight: 700, padding: "4px 10px", borderRadius: "20px" }}>{incident.priority}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "18px" }}>
+          <InfoCell iconName="server" label="Affected system" value={incident.system} />
+          <InfoCell iconName="git" label="Linked ADO item" value={incident.ado} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#0c3325", border: "1px solid #1c5c43", borderRadius: "10px", padding: "12px 14px", marginBottom: "10px" }}>
+          <Ico name="check" size={18} color="#34d399" />
+          <div style={{ fontSize: "13px" }}><b>ADO status: Completed</b> — linked work item resolved &amp; validated</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#0c2a3f", border: "1px solid #1e4a6b", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
+          <Ico name="zap" size={18} color="#38bdf8" />
+          <div style={{ fontSize: "13px" }}><b>Suggested action:</b> Auto-close incident (governance checks passed)</div>
+        </div>
+        <div style={{ fontSize: "12px", fontWeight: 600, color: "#8695af", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Auto-generated work notes</div>
+        <div style={{ background: "#0f1521", border: "1px solid #24304a", borderRadius: "10px", padding: "14px", minHeight: "70px", fontSize: "13px", lineHeight: 1.6, color: notes ? "#dbe3ef" : "#5f6d88" }}>
+          {loading
+            ? <span style={{ display: "flex", alignItems: "center", gap: "8px", color: "#8695af" }}><Ico name="loader" size={15} className="spin" /> Generating closure notes…</span>
+            : notes || 'Click "Generate work notes" to draft the closure summary from the ADO resolution.'}
+        </div>
+        <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+          <button onClick={generateNotes} disabled={loading} style={btn("#1e3a5f", "#7dd3fc", loading)}>
+            <Ico name="zap" size={15} /> Generate work notes
+          </button>
+          <button onClick={() => setClosed(true)} disabled={!notes || closed} style={btn(closed ? "#0c3325" : "#166534", closed ? "#34d399" : "#dcfce7", !notes || closed)}>
+            {closed
+              ? <React.Fragment><Ico name="check" size={15} /> Incident Closed</React.Fragment>
+              : <React.Fragment>Auto-Close Incident <Ico name="arrow" size={15} /></React.Fragment>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkCleanup({ incidents }) {
+  const [selected, setSelected] = useState([]);
+  const [closedIds, setClosedIds] = useState([]);
+  const eligible = incidents.filter((i) => i.adoStatus === "Completed" && !closedIds.includes(i.id));
+  const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const allSel = eligible.length > 0 && selected.length === eligible.length;
+  const closeSel = () => { setClosedIds((c) => [...c, ...selected]); setSelected([]); };
+  const btn = (bg, fg, disabled) => ({
+    display: "flex", alignItems: "center", gap: "7px", background: bg, color: fg, border: "none",
+    borderRadius: "9px", padding: "10px 16px", fontSize: "13px", fontWeight: 600,
+    cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.55 : 1, fontFamily: "inherit",
+  });
+  const slaChip = (sla) => {
+    const map = { Breached: ["#3a1616", "#f87171"], "At Risk": ["#3a2f0c", "#fbbf24"], OK: ["#0c3325", "#34d399"] };
+    const [bg, fg] = map[sla] || map.OK;
+    return <span style={{ background: bg, color: fg, fontSize: "10px", fontWeight: 700, padding: "3px 9px", borderRadius: "20px" }}>{sla}</span>;
+  };
+  return (
+    <div>
+      <Header title="Bulk Cleanup Console" subtitle="Close stale incidents whose ADO work is complete" />
+      <div style={{ background: "#141c2b", border: "1px solid #24304a", borderRadius: "12px", overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #24304a" }}>
+          <div style={{ fontSize: "13px", color: "#aab6cc" }}><b style={{ color: "#e6ebf2" }}>{eligible.length}</b> tickets eligible for closure</div>
+          <button onClick={closeSel} disabled={selected.length === 0} style={btn(selected.length ? "#166534" : "#1d2739", selected.length ? "#dcfce7" : "#5f6d88", selected.length === 0)}>
+            <Ico name="trash" size={14} /> Close Selected ({selected.length})
+          </button>
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+          <thead>
+            <tr style={{ background: "#0f1521", color: "#7c8aa5", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              <th style={{ padding: "10px 18px", textAlign: "left", width: "40px" }}>
+                <input type="checkbox" checked={allSel} onChange={() => setSelected(allSel ? [] : eligible.map((i) => i.id))} />
+              </th>
+              <th style={{ padding: "10px 8px", textAlign: "left" }}>Incident</th>
+              <th style={{ padding: "10px 8px", textAlign: "left" }}>Linked ADO</th>
+              <th style={{ padding: "10px 8px", textAlign: "left" }}>Age</th>
+              <th style={{ padding: "10px 8px", textAlign: "left" }}>SLA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {eligible.map((inc) => (
+              <tr key={inc.id} style={{ borderBottom: "1px solid #1d2739", background: selected.includes(inc.id) ? "#16233a" : "transparent" }}>
+                <td style={{ padding: "12px 18px" }}>
+                  <input type="checkbox" checked={selected.includes(inc.id)} onChange={() => toggle(inc.id)} />
+                </td>
+                <td style={{ padding: "12px 8px" }}>
+                  <div style={{ fontWeight: 600 }}>{inc.id}</div>
+                  <div style={{ fontSize: "11px", color: "#7c8aa5", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inc.title}</div>
+                </td>
+                <td style={{ padding: "12px 8px", color: "#aab6cc" }}>{inc.ado}</td>
+                <td style={{ padding: "12px 8px", color: inc.age > 15 ? "#f87171" : "#aab6cc" }}>{inc.age}d</td>
+                <td style={{ padding: "12px 8px" }}>{slaChip(inc.sla)}</td>
+              </tr>
+            ))}
+            {eligible.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: "30px", textAlign: "center", color: "#5f6d88" }}>
+                <Ico name="check" size={22} color="#34d399" style={{ marginBottom: "8px" }} />
+                <div>Queue clean — all eligible tickets closed.</div>
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {closedIds.length > 0 && (
+        <div style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "9px", color: "#34d399", fontSize: "13px" }}>
+          <Ico name="bell" size={15} /> {closedIds.length} incident(s) auto-closed · work notes posted · teams notified
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({ title, subtitle }) {
+  return (
+    <div style={{ marginBottom: "20px" }}>
+      <h1 style={{ fontSize: "22px", fontWeight: 700, margin: 0 }}>{title}</h1>
+      <p style={{ fontSize: "13px", color: "#8695af", margin: "3px 0 0" }}>{subtitle}</p>
+    </div>
+  );
+}
+function InfoCell({ iconName, label, value }) {
+  return (
+    <div style={{ background: "#0f1521", border: "1px solid #24304a", borderRadius: "9px", padding: "11px 13px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "10px", color: "#7c8aa5", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
+        <Ico name={iconName} size={12} /> {label}
+      </div>
+      <div style={{ fontSize: "13px", fontWeight: 500 }}>{value}</div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
